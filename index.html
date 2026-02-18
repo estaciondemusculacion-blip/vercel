@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html class="dark" lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Elite Warrior Tracker</title>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#136dec",
+            "background-light": "#f6f7f8",
+            "background-dark": "#101822",
+            "hydration": "#00a3ff",
+            "protein": "#f59e0b",
+            "danger": "#ef4444",
+            "success": "#10b981",
+          },
+          fontFamily: { "display": ["Manrope", "sans-serif"] },
+          borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" },
+        },
+      },
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer base {
+      body {
+        @apply bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display transition-colors duration-300;
+        -webkit-tap-highlight-color: transparent;
+        min-height: 100dvh;
+      }
+    }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .hero-gradient { background: linear-gradient(135deg, #136dec 0%, #0a3a7a 100%); }
+    .warrior-gradient { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+    .glow-primary { box-shadow: 0 0 25px 2px rgba(19, 109, 236, 0.25); }
+    .font-fill { font-variation-settings: 'FILL' 1; }
+    
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .animate-slide-up { animation: slideUp 0.3s ease-out; }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-fade { animation: fadeIn 0.4s ease-out; }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <!-- React & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // --- Componentes ---
+    const Icon = ({ name, className = "", fill = false }) => (
+      <span className={cn("material-symbols-outlined", className, fill ? "font-fill" : "")}>{name}</span>
+    );
+
+    const cn = (...classes) => classes.filter(Boolean).join(" ");
+
+    const CardShell = ({ children, className = "" }) => (
+      <div className={cn("bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-5 shadow-sm", className)}>
+        {children}
+      </div>
+    );
+
+    // --- Notificaciones ---
+    const NotificationSheet = ({ isOpen, onClose, pendingTasks }) => {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-[100] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={onClose}></div>
+          <div className="relative bg-white dark:bg-slate-900 w-full max-w-md mx-auto rounded-t-[2.5rem] p-8 shadow-2xl animate-slide-up">
+            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-8"></div>
+            <h3 className="text-2xl font-extrabold mb-2 text-slate-900 dark:text-white">Pendientes Hoy</h3>
+            <p className="text-slate-500 text-sm mb-6 font-medium">Completa estas metas para fortalecer tu racha.</p>
+            <div className="space-y-4 mb-8">
+              {pendingTasks.length > 0 ? pendingTasks.map((task, i) => (
+                <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10 text-primary">
+                    <Icon name={task.icon} className="text-xl" fill />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{task.title}</p>
+                    <p className="text-[11px] text-slate-400 font-medium">{task.sub}</p>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-6">
+                  <Icon name="verified" className="text-success text-5xl mb-3" fill />
+                  <p className="font-bold text-lg text-slate-900 dark:text-white">¡Impecable!</p>
+                  <p className="text-slate-400 text-sm">Has cumplido con todo por hoy.</p>
+                </div>
+              )}
+            </div>
+            <button className="w-full py-4 font-bold text-primary text-sm uppercase tracking-widest" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Lógica Principal ---
+    const App = () => {
+      const [view, setView] = useState("log"); // "log" | "summary"
+      const [isSheetOpen, setIsSheetOpen] = useState(false);
+      
+      const [history, setHistory] = useState(() => {
+        const saved = localStorage.getItem("elite_warrior_history_v1");
+        return saved ? JSON.parse(saved) : {};
+      });
+
+      const [userName, setUserName] = useState(() => localStorage.getItem("elite_user_name") || "");
+      const [startDate] = useState(() => {
+        const saved = localStorage.getItem("elite_start_date");
+        if (saved) return saved;
+        const d = new Date().toISOString().split('T')[0];
+        localStorage.setItem("elite_start_date", d);
+        return d;
+      });
+
+      const todayKey = new Date().toISOString().split('T')[0];
+
+      const [dailyData, setDailyData] = useState(history[todayKey] || {
+        energy: null,
+        training: false,
+        protein: 25,
+        hydration: 0,
+        completed: false
+      });
+
+      useEffect(() => {
+        const newHistory = { ...history, [todayKey]: dailyData };
+        setHistory(newHistory);
+        localStorage.setItem("elite_warrior_history_v1", JSON.stringify(newHistory));
+      }, [dailyData]);
+
+      useEffect(() => {
+        localStorage.setItem("elite_user_name", userName);
+      }, [userName]);
+
+      const progress = useMemo(() => {
+        let score = 0;
+        if (dailyData.energy) score += 20;
+        if (dailyData.training) score += 40;
+        if (dailyData.protein >= 75) score += 20;
+        if (dailyData.hydration >= 2.0) score += 20;
+        return score;
+      }, [dailyData]);
+
+      const pendingTasks = useMemo(() => {
+        const tasks = [];
+        if (!dailyData.energy) tasks.push({ icon: 'mood', title: 'Energía', sub: 'Registra cómo te sientes' });
+        if (!dailyData.training) tasks.push({ icon: 'fitness_center', title: 'Entrenamiento', sub: 'Tu cuerpo necesita movimiento' });
+        if (dailyData.hydration < 2.5) tasks.push({ icon: 'water_drop', title: 'Agua', sub: `Te faltan ${(2.5 - dailyData.hydration).toFixed(1)}L` });
+        if (dailyData.protein < 100) tasks.push({ icon: 'restaurant', title: 'Proteína Diaria', sub: 'Asegura tu recuperación' });
+        return tasks;
+      }, [dailyData]);
+
+      const completedDaysCount = useMemo(() => {
+        return Object.values(history).filter(d => (d.training && d.hydration >= 2)).length;
+      }, [history]);
+
+      // VISTA DE REGISTRO
+      if (view === "log") {
+        return (
+          <div className="max-w-md mx-auto pb-32 animate-fade">
+            <header className="flex items-center justify-between px-6 pt-10 pb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <Icon name="person" className="text-primary text-2xl" fill />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-0.5">Día {completedDaysCount + 1} de 30</p>
+                  <h1 className="text-xl font-extrabold tracking-tight text-slate-800 dark:text-white">{userName || 'Guerrero'}</h1>
+                </div>
+              </div>
+              <button onClick={() => setIsSheetOpen(true)} className="relative w-12 h-12 rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
+                <Icon name="notifications" className="text-slate-500" />
+                {pendingTasks.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-danger text-white text-[10px] font-black flex items-center justify-center rounded-full ring-4 ring-background-light dark:ring-background-dark">
+                    {pendingTasks.length}
+                  </span>
+                )}
+              </button>
+            </header>
+
+            <section className="px-6 mb-8">
+              <div className="hero-gradient rounded-[2.5rem] p-8 text-white shadow-2xl glow-primary relative overflow-hidden">
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <p className="opacity-70 text-[10px] font-black uppercase tracking-widest mb-1">Score de Hoy</p>
+                    <h2 className="text-4xl font-black">{progress}%</h2>
+                  </div>
+                  <div className="w-20 h-20 relative">
+                    <svg className="w-full h-full -rotate-90">
+                      <circle cx="40" cy="40" r="34" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/10" />
+                      <circle cx="40" cy="40" r="34" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray="213.6" strokeDashoffset={213.6 - (213.6 * progress) / 100} className="text-white transition-all duration-700" strokeLinecap="round" />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Icon name="bolt" className="text-xl text-white" fill />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <main className="px-6 space-y-5">
+              <CardShell>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Icon name="mood" className="text-lg text-primary" fill /> Nivel de Energía
+                </p>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { id: 'motivado', e: '⚡', l: 'Top' },
+                    { id: 'power', e: '🔥', l: 'Power' },
+                    { id: 'feliz', e: '😊', l: 'Bien' },
+                    { id: 'cansado', e: '🪫', l: 'Bajo' }
+                  ].map(opt => (
+                    <button key={opt.id} onClick={() => setDailyData({...dailyData, energy: opt.id})} className={cn("flex flex-col items-center p-3 rounded-2xl border transition-all", dailyData.energy === opt.id ? "border-primary bg-primary/10 scale-105" : "border-slate-100 dark:border-slate-700 bg-slate-50/50")}>
+                      <span className="text-xl mb-1">{opt.e}</span>
+                      <span className={cn("text-[9px] font-black uppercase", dailyData.energy === opt.id ? "text-primary" : "text-slate-400")}>{opt.l}</span>
+                    </button>
+                  ))}
+                </div>
+              </CardShell>
+
+              <CardShell>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Icon name="fitness_center" className="text-lg text-primary" fill /> Entrenamiento
+                    </p>
+                    <p className="text-sm font-bold text-slate-600 dark:text-slate-300">¿Sesión completada?</p>
+                  </div>
+                  <div className="flex bg-slate-100 dark:bg-slate-900 rounded-full p-1.5 border border-slate-200 dark:border-slate-700">
+                    <button onClick={() => setDailyData({...dailyData, training: false})} className={cn("px-5 py-2 rounded-full text-xs font-black transition-all", !dailyData.training ? "bg-white dark:bg-slate-700 text-primary" : "text-slate-400")}>NO</button>
+                    <button onClick={() => setDailyData({...dailyData, training: true})} className={cn("px-5 py-2 rounded-full text-xs font-black transition-all", dailyData.training ? "bg-white dark:bg-slate-700 text-success" : "text-slate-400")}>SÍ</button>
+                  </div>
+                </div>
+              </CardShell>
+
+              <CardShell>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Icon name="restaurant" className="text-lg text-protein" fill /> Proteína Diaria: {dailyData.protein}%
+                </p>
+                <input type="range" min="25" max="100" step="25" value={dailyData.protein} onChange={(e) => setDailyData({...dailyData, protein: parseInt(e.target.value)})} className="w-full h-2 bg-slate-100 dark:bg-slate-900 rounded-lg appearance-none accent-protein" />
+                <div className="flex justify-between mt-3 text-[10px] font-black text-slate-400 uppercase">
+                  <span>Mínimo (25%)</span><span>Medio</span><span>Óptimo (100%)</span>
+                </div>
+              </CardShell>
+
+              <CardShell>
+                <div className="flex justify-between items-center mb-5">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Icon name="water_drop" className="text-lg text-hydration" fill /> Agua
+                  </p>
+                  <span className="text-xl font-black text-hydration">{dailyData.hydration.toFixed(1)}L <span className="text-slate-300 text-sm">/ 2.5L</span></span>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setDailyData({...dailyData, hydration: Math.max(0, dailyData.hydration - 0.5)})} className="flex-1 py-4 bg-slate-100 dark:bg-slate-900 rounded-2xl text-slate-400"><Icon name="remove"/></button>
+                  <button onClick={() => setDailyData({...dailyData, hydration: Math.min(4, dailyData.hydration + 0.5)})} className="flex-[2] py-4 bg-hydration text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"><Icon name="add"/> 500ML</button>
+                </div>
+              </CardShell>
+            </main>
+
+            <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-6 bg-gradient-to-t from-background-light dark:from-background-dark to-transparent z-40">
+              <button onClick={() => setView("summary")} className="w-full bg-slate-900 dark:bg-primary text-white py-5 rounded-[2rem] font-black text-sm tracking-[0.2em] shadow-2xl active:scale-95 uppercase">
+                Ver Resumen Guerrero
+              </button>
+            </div>
+
+            <NotificationSheet isOpen={isSheetOpen} onClose={() => setIsSheetOpen(false)} pendingTasks={pendingTasks} />
+            
+            {!userName && (
+              <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md">
+                <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[3rem] p-10 text-center space-y-6 shadow-2xl animate-slide-up">
+                  <Icon name="shield" className="text-6xl text-primary" fill />
+                  <h2 className="text-3xl font-black text-slate-800 dark:text-white">Identidad</h2>
+                  <input type="text" placeholder="Ingresa tu nombre" className="w-full p-5 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-center font-bold text-lg" onKeyDown={(e) => e.key === 'Enter' && setUserName(e.currentTarget.value)} />
+                  <p className="text-xs text-slate-400 font-bold uppercase">Presiona ENTER para iniciar</p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // VISTA DE RESUMEN
+      return (
+        <div className="max-w-md mx-auto p-6 pb-24 min-h-screen animate-fade text-slate-800 dark:text-white">
+          <header className="flex items-center gap-4 mb-10 pt-4">
+            <button onClick={() => setView("log")} className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-100 dark:border-slate-700 shadow-sm">
+              <Icon name="arrow_back" />
+            </button>
+            <h1 className="text-2xl font-extrabold">Vista General</h1>
+          </header>
+
+          <section className="warrior-gradient rounded-[3rem] p-8 text-white mb-10 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-6 opacity-10 rotate-12">
+              <Icon name="military_tech" className="text-[120px]" fill />
+            </div>
+            <div className="relative z-10">
+              <p className="text-[10px] font-black uppercase opacity-60 tracking-[0.3em] mb-3">Estado de Legado</p>
+              <h2 className="text-4xl font-black mb-8 italic tracking-tighter uppercase">Modo Guerrero</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 backdrop-blur-md p-5 rounded-3xl border border-white/10">
+                  <p className="text-[10px] font-bold opacity-50 uppercase mb-1">Victorias</p>
+                  <p className="text-3xl font-black">{completedDaysCount}/30</p>
+                </div>
+                <div className="bg-white/5 backdrop-blur-md p-5 rounded-3xl border border-white/10">
+                  <p className="text-[10px] font-bold opacity-50 uppercase mb-1">Racha</p>
+                  <p className="text-3xl font-black text-orange-400">0{Math.min(completedDaysCount, 9)}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6 px-2">Calendario de Desafío</h3>
+          <div className="grid grid-cols-5 gap-3">
+            {Array.from({ length: 30 }).map((_, i) => {
+              const dayNum = i + 1;
+              const dateAtI = new Date(startDate);
+              dateAtI.setDate(dateAtI.getDate() + i);
+              const keyAtI = dateAtI.toISOString().split('T')[0];
+              const isToday = keyAtI === todayKey;
+              const dayData = history[keyAtI];
+              const isWon = dayData && dayData.training && dayData.hydration >= 2;
+              const isPast = keyAtI < todayKey;
+
+              return (
+                <div key={i} className={cn(
+                  "aspect-square rounded-2xl flex items-center justify-center border-2 transition-all",
+                  isWon ? "bg-success/10 border-success/40 text-success" : 
+                  isToday ? "bg-primary text-white border-primary glow-primary scale-110 z-10 shadow-lg" :
+                  isPast ? "bg-slate-100 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700/50 text-slate-300" :
+                  "bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800 text-slate-200"
+                )}>
+                  {isWon ? <Icon name="check_circle" fill /> : <span className="text-xs font-bold">{dayNum}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
